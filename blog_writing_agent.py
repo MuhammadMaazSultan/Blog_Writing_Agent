@@ -74,7 +74,7 @@ graph_builder.add_edge('reducer', END)
 graph = graph_builder.compile()
 
 #---- invoking to get the required Blog ----
-initial_state = {'topic':'Artificial Intelligence in today era'}
+initial_state = {'topic':'Self Attention'}
 response = graph.invoke(initial_state)
 
 print(response['Blog'])
