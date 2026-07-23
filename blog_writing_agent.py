@@ -11,10 +11,12 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 from concurrent.futures import ThreadPoolExecutor
 from dotenv import load_dotenv
 
+import config
+
 load_dotenv()
 
 #---- model ----
-model = ChatOllama(model='llama3.1' , temperature = 0.5)
+model = ChatOllama(model=config.CHAT_MODEL , temperature = 0.5)
 
 #---- schemas ----
 class Task(BaseModel):
@@ -30,7 +32,8 @@ class Plan(BaseModel):
 class RouterDecision(BaseModel):
     needs_research : bool = Field(...,description="True if web search is required to gather up-to-date or specific facts.",)
     queries : List[str] = Field(default_factory=list, description="3-10 high-signal specific search queries if search is needed.",)
-    
+
+#---- state ----
 class BlogState(TypedDict):
     topic : str
     plan : Plan
@@ -62,13 +65,7 @@ def router(state: BlogState):
     topic = state['topic']
     model_with_router = model.with_structured_output(RouterDecision)
 
-    prompt = """You are a routing module 
-    decide if the web search is needed to get the results or not
-    
-    If needs_research=true:
-    - Output 3–10 high-signal queries.
-    - Queries should be scoped and specific (avoid generic queries like just "AI" or "LLM").
-    - If user asked for "last week/this week/latest", reflect that constraint IN THE QUERIES."""
+    prompt = config.ROUTER_PROMPT
     response = model_with_router.invoke([SystemMessage(prompt),
                   HumanMessage(content=f'topic : {topic}')])
     return {'needs_research':response.needs_research, 'queries': response.queries}
@@ -89,7 +86,7 @@ def research(state:BlogState):
 def planner(state: BlogState):
     topic = state['topic']
     web_searches = state['evidences']
-    prompt = " Create a blog plan with 5-7 sections on the following topic and also consider the searches that we have explicitly searched on the browser"
+    prompt = config.PLANNER_PROMPT
     planner_model = model.with_structured_output(Plan)
     response = planner_model.invoke([SystemMessage(prompt),  HumanMessage(content = f'topic : {topic}, web_searched: {web_searches}')])
     return {'plan':response}
@@ -101,7 +98,8 @@ def worker(payload: dict) -> dict:
     topic = payload['topic']
     task = payload['task']
     evidences = payload['evidences']
-    prompt = [SystemMessage("write one clean markdown section"),
+    system_prompt = config.WORKER_PROMPT
+    prompt = [SystemMessage(system_prompt),
              HumanMessage(content=f"topic: {topic}\ntitle: {task.title}\ntone: {task.tone}\nwords: {task.words}\nbrief: {task.brief}\n web_searched : {evidences}")]
     response = model.invoke(prompt).content.strip()
     return {'sections':[response]}
